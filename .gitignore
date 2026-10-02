@@ -1,0 +1,22 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.jks
+*.keystore
+signing.properties
+__pycache__/
+.idea/
+
+# Private signing material and generated packages
+private-signing/
+*signing-recovery*
+password.txt
+KEYSTORE_BASE64.txt
+*.p12
+*.pfx
+*.apk
+*.aab
+*.idsig
+.env
+.env.*
