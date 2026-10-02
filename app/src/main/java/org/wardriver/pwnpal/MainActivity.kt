@@ -58,6 +58,8 @@ private data class Tab(val label:String,val icon:ImageVector)
 private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outlined.Link),Tab("Manage",Icons.Outlined.Tune),Tab("Logs",Icons.Outlined.Terminal))
 @Composable private fun PwnPal(model:AppModel=viewModel()) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var plugins by rememberSaveable { mutableStateOf(false) }
+    var support by remember { mutableStateOf(false) }
     var action by remember { mutableStateOf<String?>(null) }
     var exportText by remember { mutableStateOf("") }
     var localMessage by remember { mutableStateOf("") }
@@ -95,13 +97,14 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
                 when(tab) {
                     0 -> Home(model,{tab=1})
                     1 -> Connect(model)
-                    2 -> Manage(model,{action=it})
+                    2 -> if(plugins) PluginScreen(model,{plugins=false},{action="Restart service"}) else Manage(model,{action=it},{plugins=true},{support=true})
                     3 -> Logs(model,{export(it,"pwnpal-device.log")})
                 }
-                Text("PwnPal 0.1.0 beta  ·  Local connection",color=MaterialTheme.colorScheme.secondary,fontSize=11.sp)
+                Text("PwnPal ${BuildConfig.VERSION_NAME}  ·  Local connection",color=MaterialTheme.colorScheme.secondary,fontSize=11.sp)
             }
         }
     }
+    if(support) SupportSheet { support=false }
     model.trust?.let { trust ->
         AlertDialog(onDismissRequest={model.rejectTrust()},icon={Icon(Icons.Outlined.VerifiedUser,null)},title={Text(if(trust.changed) "Device identity changed" else "Verify your Pwnagotchi")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(if(trust.changed) "The saved SSH key no longer matches. Only replace it if you intentionally reinstalled the device or changed its host key." else "Before sending your password, compare this fingerprint with your device's SSH host key.")
@@ -205,14 +208,18 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
     }
     Button(onClick={if(m.connected)m.disconnect() else m.connect()},enabled=!m.busy,modifier=Modifier.fillMaxWidth().height(52.dp)){Text(if(m.connected) "Disconnect" else "Connect securely")}
 }
-@Composable private fun Manage(m:AppModel,confirm:(String)->Unit) {
+@Composable private fun Manage(m:AppModel,confirm:(String)->Unit,plugins:()->Unit,support:()->Unit) {
     Heading("Make it yours.","Device controls and configuration, in one place.")
-    if(!m.connected) {Notice("Connect to your Pwnagotchi to manage it.");OutlinedButton(onClick={confirm("Forget device")},enabled=!m.busy){Text("Forget saved device")};return}
+    if(!m.connected) {Notice("Connect to your Pwnagotchi to manage it.");OutlinedButton(onClick={confirm("Forget device")},enabled=!m.busy){Text("Forget saved device")};SupportLink(support);return}
     if(m.status?.privileged==false) Notice("Your account does not have passwordless sudo. Administrative actions may be unavailable.")
     Section("Device controls") {
         listOf("Restart service","Reboot device","Shut down device","Cancel scheduled power action").forEach { action ->
             OutlinedButton(onClick={confirm(action)},enabled=!m.busy,modifier=Modifier.fillMaxWidth()){Text(action)}
         }
+    }
+    Section("Plugins") {
+        Text("Manage built-in plugins and install third-party plugins from GitHub.")
+        OutlinedButton(onClick=plugins,enabled=!m.busy){Text("Manage plugins")}
     }
     Section("Configuration") {
         Text("Edit /etc/pwnagotchi/config.toml. The original is backed up on the device before each save. Saving does not restart the service.",style=MaterialTheme.typography.bodySmall)
@@ -226,6 +233,10 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
         }
     }
     TextButton(onClick={confirm("Forget device")},enabled=!m.busy){Text("Forget saved device")}
+    SupportLink(support)
+}
+@Composable private fun SupportLink(open:()->Unit) {
+    TextButton(onClick=open,colors=ButtonDefaults.textButtonColors(contentColor=MaterialTheme.colorScheme.secondary)){Icon(Icons.Outlined.FavoriteBorder,null,Modifier.size(16.dp));Spacer(Modifier.width(8.dp));Text("Support PwnPal",style=MaterialTheme.typography.bodySmall)}
 }
 @Composable private fun Logs(m:AppModel,export:(String)->Unit) {
     Heading("See what’s happening.","The latest 150 Pwnagotchi service log lines.")

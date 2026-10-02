@@ -52,14 +52,14 @@ class DeviceClient(private val context: Context, private val vault: Vault) {
             throw rejected ?: e
         }
     }
-    fun command(command: String, limit: Int = 512 * 1024): String {
+    fun command(command: String, limit: Int = 512 * 1024, stdin: ByteArray? = null): String {
         val s = session?.takeIf { it.isConnected } ?: error("SSH connection is closed. Reconnect from Connect.")
         val ch = s.openChannel("exec") as ChannelExec
         val output = ByteArrayOutputStream()
         val errors = ByteArrayOutputStream()
         try {
             ch.setCommand(command)
-            ch.setInputStream(null)
+            ch.setInputStream(stdin?.inputStream())
             ch.setErrStream(errors)
             val input = ch.inputStream
             ch.connect(10000)
@@ -82,10 +82,16 @@ class DeviceClient(private val context: Context, private val vault: Vault) {
     }
     private fun script(name: String, prefix: String = "", privileged: Boolean = true): String {
         val source = prefix + context.assets.open(name).bufferedReader().use { it.readText() }
-        val encoded = Base64.getEncoder().encodeToString(source.toByteArray())
-        val python = "import base64;exec(compile(base64.b64decode('$encoded'),'<pwnpal>','exec'))"
-        return command((if(privileged) "sudo -n " else "") + "python3 -c " + shellQuote(python))
+        return command((if(privileged) "sudo -n " else "") + "python3 -", stdin=source.toByteArray())
     }
+    fun plugins(request: JSONObject = JSONObject().put("action","list")): JSONObject {
+        val args=Base64.getEncoder().encodeToString(request.toString().toByteArray())
+        val helper=Base64.getEncoder().encodeToString(context.assets.open("config_save.py").use { it.readBytes() })
+        val source="REQUEST='$args'\nCONFIG_HELPER='$helper'\n" + context.assets.open("plugins.py").bufferedReader().use { it.readText() }
+        val runner="if [ -x /home/pi/.pwn/bin/python3 ]; then exec /home/pi/.pwn/bin/python3 -; else exec python3 -; fi"
+        return JSONObject(command("sudo -n /bin/sh -c " + shellQuote(runner),stdin=source.toByteArray()))
+    }
+
     fun status(): DeviceStatus {
         val root = runCatching { command("sudo -n true") }.isSuccess
         val j = JSONObject(script("status.py", privileged=root))

@@ -9,6 +9,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.net.UnknownHostException
+import org.json.JSONObject
+import java.util.Base64
 
 class AppModel(app: Application): AndroidViewModel(app) {
     private val vault = Vault(app)
@@ -28,6 +30,53 @@ class AppModel(app: Application): AndroidViewModel(app) {
     var draft by mutableStateOf("")
     var trust by mutableStateOf<TrustRequired?>(null); private set
     private var trustProfile: Profile? = null
+    private val pluginRepo=PluginRepository()
+    var pluginEntries by mutableStateOf<List<PluginEntry>>(emptyList()); private set
+    var pluginToken by mutableStateOf(""); private set
+    var catalog by mutableStateOf<List<PluginCatalogItem>>(emptyList()); private set
+    var review by mutableStateOf<PluginReview?>(null); private set
+    var pendingPluginRestart by mutableStateOf(false); private set
+    private fun clearPlugins(){pluginEntries=emptyList();pluginToken="";review=null;pendingPluginRestart=false}
+    private suspend fun readPlugins() {
+        val result=withContext(Dispatchers.IO){client.plugins()}
+        pluginToken=result.getString("token")
+        val a=result.getJSONArray("plugins")
+        pluginEntries=(0 until a.length()).map{val p=a.getJSONObject(it);PluginEntry(p.getString("name"),p.getString("kind"),p.getString("version"),p.getString("author"),p.getBoolean("enabled"),p.getString("sha256"),p.getBoolean("overridden"))}
+    }
+    fun loadPlugins(){runTask{readPlugins()}}
+    fun browsePlugins(repository:String){runTask{catalog=emptyList();catalog=withContext(Dispatchers.IO){pluginRepo.browse(repository)};if(catalog.isEmpty())message="No supported Python files were found in this repository."}}
+    fun reviewPlugin(url:String,name:String){
+        if(!connected)return
+        runTask{
+            review=null
+            PluginLinks.pluginName(name)
+            val (raw,source)=withContext(Dispatchers.IO){pluginRepo.download(url)}
+            val request=JSONObject().put("action","inspect").put("name",name).put("source",Base64.getEncoder().encodeToString(source.toByteArray()))
+            val result=withContext(Dispatchers.IO){client.plugins(request)}
+            review=PluginReview(name,raw,source,result.getString("sha256"),result.getString("token"),result.getString("previous"),result.getString("version"),result.getString("author"),result.getString("description"),result.getBoolean("updating"),result.getBoolean("overridden"))
+        }
+    }
+    fun cancelReview(){review=null}
+    fun installPlugin(){
+        val r=review?:return
+        if(!connected)return
+        runTask{
+            val request=JSONObject().put("action","install").put("name",r.name).put("token",r.token).put("previous",r.previous).put("sha256",r.hash).put("source",Base64.getEncoder().encodeToString(r.source.toByteArray()))
+            val result=withContext(Dispatchers.IO){client.plugins(request)}
+            review=null;pendingPluginRestart=true;message=result.getString("message")+" Backup: "+result.optString("backup")
+            readPlugins()
+        }
+    }
+    fun changePlugin(p:PluginEntry,remove:Boolean=false){
+        if(!connected)return
+        val token=pluginToken
+        runTask{
+            val request=JSONObject().put("action",if(remove)"remove" else "toggle").put("name",p.name).put("token",token).put("previous",p.hash).put("enabled",!p.enabled)
+            val result=withContext(Dispatchers.IO){client.plugins(request)}
+            pendingPluginRestart=true;message=result.getString("message");readPlugins()
+        }
+    }
+
     init { runCatching { vault.load() }.onSuccess { profile=it }.onFailure { error="Saved credentials could not be decrypted. Enter them again." } }
     private fun runTask(block: suspend () -> Unit) {
         if(busy) return
@@ -45,7 +94,7 @@ class AppModel(app: Application): AndroidViewModel(app) {
         val p=profile.copy(host=profile.host.trim(), user=profile.user.trim())
         profile=p
         runTask {
-            connected=false; status=null; screen=null; config=null; draft=""; logs=""; updated=""
+            connected=false; clearPlugins(); status=null; screen=null; config=null; draft=""; logs=""; updated=""
             withContext(Dispatchers.IO) { client.connect(p); vault.save(p) }
             connected=true
             refreshInternal()
@@ -59,8 +108,8 @@ class AppModel(app: Application): AndroidViewModel(app) {
         connect()
     }
     fun rejectTrust() { trust=null; trustProfile=null }
-    fun disconnect() { runTask { withContext(Dispatchers.IO){client.disconnect()}; connected=false; status=null; screen=null; config=null; draft=""; logs=""; updated=""; message="Disconnected" } }
-    fun forget() { runTask { withContext(Dispatchers.IO){client.disconnect();vault.forget()}; connected=false; profile=Profile(); status=null; screen=null; config=null; draft=""; logs=""; message="Saved device and credentials removed" } }
+    fun disconnect() { runTask { withContext(Dispatchers.IO){client.disconnect()}; connected=false; clearPlugins(); status=null; screen=null; config=null; draft=""; logs=""; updated=""; message="Disconnected" } }
+    fun forget() { runTask { withContext(Dispatchers.IO){client.disconnect();vault.forget()}; connected=false; clearPlugins(); profile=Profile(); status=null; screen=null; config=null; draft=""; logs=""; message="Saved device and credentials removed" } }
     private suspend fun refreshInternal() {
         status=withContext(Dispatchers.IO){client.status()}
         val frame=withContext(Dispatchers.IO){runCatching { client.face() }}
@@ -79,7 +128,7 @@ class AppModel(app: Application): AndroidViewModel(app) {
             message="Saved. Backup: ${result.first}. Restart the service when ready to apply changes."
         }
     }
-    fun control(action: String) { runTask { withContext(Dispatchers.IO){client.control(action)}; message=when(action){"Reboot device","Shut down device" -> "$action scheduled for one minute from now. You can cancel it below.";else -> "$action completed"}; status=null; screen=null } }
+    fun control(action: String) { runTask { withContext(Dispatchers.IO){client.control(action)}; if(action=="Restart service")pendingPluginRestart=false; message=when(action){"Reboot device","Shut down device" -> "$action scheduled for one minute from now. You can cancel it below.";else -> "$action completed"}; status=null; screen=null } }
     private fun friendly(e: Exception): String {
         val s=e.message.orEmpty()
         return when {

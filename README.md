@@ -1,4 +1,4 @@
-# PwnPal · 0.1.0 beta
+# PwnPal · 0.2.0 beta
 
 A native Android companion for a Pwnagotchi running jayofelony 2.9.5.4. Built with Kotlin and Jetpack Compose, with a dark interface and a side-by-side dashboard on wider screens.
 
@@ -8,7 +8,7 @@ A native Android companion for a Pwnagotchi running jayofelony 2.9.5.4. Built wi
 
 *Home screen in the Android emulator, before connecting a device. Captured before the final status-bar contrast fix.*
 
-## What works in this first beta
+## Features
 
 - One saved device profile with Android Keystore encrypted credentials.
 - SSH host fingerprint confirmation before password authentication; changed identities require explicit confirmation.
@@ -43,6 +43,22 @@ The device must provide Python 3.11+ (including tomllib), systemd, and an SSH se
 
 **Power controls intentionally schedule reboot/shutdown one minute ahead**, allowing cancellation and allowing SSH to report whether the command was accepted.
 
+## Plugins
+
+Open **Manage → Manage plugins** to list built-in and custom plugins, enable/disable them in configuration, or remove custom plugins. Built-in files cannot be replaced or removed. Restart the service explicitly to apply changes; configured state does not prove a plugin is currently running.
+
+Under **Install**, enter a public GitHub repository (`owner/repository`) to browse Python files, or paste a GitHub/raw `.py` file URL and a plugin name. Repository browsing pins downloads to a commit. Review the source, author-supplied metadata, and SHA-256 before confirming. Installation and updates save the plugin as **disabled**. Configure its options in **Manage → Configuration**, then enable it and restart the service.
+
+This installer supports individual UTF-8 Python plugins up to 256 KiB. It does not install dependencies, ZIP archives, resource bundles, or multi-file packages. Check the author's instructions and firmware compatibility. Python syntax and subclass checks do not establish safety: enabled plugins run privileged code on the device. Only use sources you trust.
+
+Existing custom files are backed up privately under `/etc/pwnagotchi/pwnpal-plugin-backups/` before replacement or removal. Configuration changes also use the normal configuration backups. Conflicting `conf.d` overrides, built-in name collisions, symlink targets, and stale reviewed/configuration hashes are rejected. If a file operation fails after saving its disabled configuration, the error identifies the configuration backup. Backups require manual restoration on the device.
+
+Plugin changes require `tomlkit` in the firmware Python environment. The app uses `/home/pi/.pwn/bin/python3` when available, otherwise system Python. It never installs Python packages automatically. Public GitHub browsing/downloads use the phone's internet connection and unauthenticated GitHub rate limits; they do not need a GitHub login. No plugin code executes during inspection.
+
+## Optional support
+
+A small **Support PwnPal** link sits at the bottom of Manage. It opens Bitcoin and Monero QR codes, copy-address buttons, and wallet links using the Wardriver donation addresses. There are no donation prompts or dashboard banners.
+
 ## Configuration safety
 
 The app reads `/etc/pwnagotchi/config.toml`. Save validates TOML syntax on the device, rejects empty/oversized content, checks that the loaded file has not changed, creates a mode-0600 backup under `/etc/pwnagotchi/pwnpal-backups/`, and atomically replaces the configuration. The new permissions retain the original owner/group bits restricted to 0660. No automatic restart occurs. Existing backup files are not automatically deleted.
@@ -53,7 +69,7 @@ Configuration compare-and-swap detects changes since loading; advisory locking c
 
 ## Current boundaries
 
-This is a first beta, not yet verified against a physical Pwnagotchi or Pixel Fold. Version-specific integration was inspected against upstream tag v2.9.5.4. Capture count means `.pcap`/`.pcapng` files, not independently validated handshakes. Missing data is shown as unavailable.
+This is a beta, not yet verified against a physical Pwnagotchi or Pixel Fold. Version-specific integration was inspected against upstream tag v2.9.5.4. Capture count means `.pcap`/`.pcapng` files, not independently validated handshakes. Missing data is shown as unavailable.
 
 Not included yet: multi-device profiles, SSH private-key import, automatic Bluetooth provisioning, native plugin-specific forms, capture downloads, or mode-switch controls. The connection choices provide setup guidance; they do not create an Android network interface. Live screen and monitoring require the device to be reachable.
 
@@ -66,6 +82,7 @@ Requirements: JDK 17, Android SDK platform 35 and build-tools 35.0.0. Android Gr
 ```sh
 printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > local.properties
 ./gradlew assembleDebug testDebugUnitTest lintDebug
+python3 -m pip install -r tests/requirements.txt
 python3 -m unittest discover -s tests -v
 ```
 
@@ -73,7 +90,7 @@ Open the root folder in Android Studio for editing. The wrapper is included. Fir
 
 ## Release signing
 
-The 0.1.0 beta release APK is non-debuggable and signed with the Wardriver HexDroid release key. Its signing certificate SHA-256 is:
+The 0.2.0 beta release APK is non-debuggable and signed with the Wardriver HexDroid release key. Its signing certificate SHA-256 is:
 
 ```text
 6b59ea42d196af4545fb3d27924b13921db94740c8a82fb5302086c311dea02a
