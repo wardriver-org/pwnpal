@@ -2,6 +2,12 @@
 
 A native Android companion for a Pwnagotchi running jayofelony 2.9.5.4. Built with Kotlin and Jetpack Compose, with a dark interface and a side-by-side dashboard on wider screens.
 
+## Screenshot
+
+<img src="docs/images/home-screen.png" alt="PwnPal Home screen showing the disconnected dashboard in the Android emulator" width="360">
+
+*Home screen in the Android emulator, before connecting a device. Captured before the final status-bar contrast fix.*
+
 ## What works in this first beta
 
 - One saved device profile with Android Keystore encrypted credentials.
