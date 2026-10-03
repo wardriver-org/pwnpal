@@ -1,15 +1,21 @@
+import contextlib
 import base64, pathlib, json, hashlib, tomllib, fcntl, os, tempfile, datetime, stat
 
-def save_config(path, expected_hash, encoded):
+@contextlib.contextmanager
+def config_lock(path):
+    with open(str(path) + '.pwnpal.lock', 'a') as lock:
+        os.chmod(lock.name, 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+def save_config(path, expected_hash, encoded, lock_held=False):
     data = base64.b64decode(encoded, validate=True)
     if len(data) > 131072: raise ValueError('Configuration exceeds 128 KiB')
     parsed = tomllib.loads(data.decode('utf-8'))
     if not parsed: raise ValueError('Refusing an empty configuration')
     path = pathlib.Path(path)
     if path.is_symlink(): raise ValueError('Refusing to replace a symlink configuration')
-    with open(str(path) + '.pwnpal.lock', 'a') as lock:
-        os.chmod(lock.name, 0o600)
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with contextlib.nullcontext() if lock_held else config_lock(path):
         old = path.read_bytes()
         if hashlib.sha256(old).hexdigest() != expected_hash:
             raise ValueError('Configuration changed on the device. Reload before saving.')

@@ -68,6 +68,32 @@ class PluginsTest(unittest.TestCase):
         self.custom.mkdir();target=self.root/'other.py';target.write_bytes(SOURCE);(self.custom/'demo.py').symlink_to(target)
         with self.assertRaisesRegex(ValueError,'symlink'):self.install()
         self.assertEqual(target.read_bytes(),SOURCE)
+    def test_config_editor_cannot_interleave_install(self):
+        import threading, fcntl
+        started=threading.Event();done=threading.Event();observed=[];errors=[]
+        def editor():
+            try:
+                with open(str(self.config)+'.pwnpal.lock','a') as lock:
+                    started.set()
+                    fcntl.flock(lock,fcntl.LOCK_EX)
+                    observed.append((self.custom/'demo.py').exists())
+                    current=self.config.read_bytes()
+                    save(self.config,p.digest(current),base64.b64encode(p.configure(current,'demo',True)).decode(),lock_held=True)
+            except Exception as e:errors.append(e)
+            finally:done.set()
+        thread=threading.Thread(target=editor,daemon=True)
+        def hooked_save(path,expected,encoded,lock_held=False):
+            result=save(path,expected,encoded,lock_held=lock_held)
+            thread.start()
+            self.assertTrue(started.wait(2))
+            self.assertFalse(done.wait(0.1),'Editor entered before plugin transaction completed')
+            return result
+        r=self.review()
+        try:
+            p.handle(dict(action='install',name='demo',token=r['token'],previous='',sha256=r['sha256'],source=base64.b64encode(SOURCE).decode()),hooked_save,self.config,self.pkg)
+        finally:
+            if thread.ident:thread.join(2)
+        self.assertTrue(done.is_set());self.assertEqual(errors,[]);self.assertEqual(observed,[True])
     def test_enable_disable(self):
         self.install()
         for enabled in [True,False]:

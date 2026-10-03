@@ -1,4 +1,15 @@
-# Validation · 0.1.0 beta
+# Validation · 0.2.1 beta
+
+- Release build, 11 Kotlin unit tests, and Android lint passed (zero lint errors).
+- 17 Python tests passed, including a concurrent editor regression proving the editor cannot enter before the plugin file transaction completes.
+- New Kotlin regressions cover stderr-only overflow, exact byte limits, export snapshot recovery by a new owner, missing/empty snapshots, and invalid snapshot identifiers.
+- Busy confirmation controls and transport-state handling were reviewed and compiled; Android lifecycle interactions still require device testing.
+- APK signature, non-debuggable manifest, version, and 16 KiB ZIP alignment verified with the existing HexDroid signing certificate.
+- No physical Pwnagotchi was available; SSH, restart behavior, and configuration changes require hardware integration validation.
+
+## Earlier validation
+
+### 0.1.0 beta
 
 - Android debug APK compiled successfully using JDK 17 / Gradle 8.11.1 / AGP 8.9.2.
 - Android lint: zero errors. Remaining warnings concern newer dependency versions and optional Kotlin convenience extensions.

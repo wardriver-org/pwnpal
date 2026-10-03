@@ -61,22 +61,15 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
     var plugins by rememberSaveable { mutableStateOf(false) }
     var support by remember { mutableStateOf(false) }
     var action by remember { mutableStateOf<String?>(null) }
-    var exportText by remember { mutableStateOf("") }
-    var localMessage by remember { mutableStateOf("") }
-    val context=LocalContext.current
     val scope=rememberCoroutineScope()
-    val exporter=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        if(uri!=null) scope.launch {
-            localMessage=withContext(Dispatchers.IO) { runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(exportText.toByteArray()) } ?: error("Cannot open destination") }.fold({"Export saved"},{"Export failed: ${it.message}"}) }
-        }
-    }
+    val exporter=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain"),model::finishExport)
     val lifecycle=LocalLifecycleOwner.current
     LaunchedEffect(model.connected,tab,lifecycle) {
         if(model.connected && tab==0) lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while(true) { delay(15000); model.refresh() }
         }
     }
-    fun export(text:String,name:String) { exportText=text; exporter.launch(name) }
+    fun export(text:String,name:String) { scope.launch { if(model.prepareExport(text)) exporter.launch(name) } }
     Scaffold(containerColor=Background, bottomBar={
         NavigationBar(containerColor=Background) { tabs.forEachIndexed { index,item ->
             NavigationBarItem(selected=tab==index,onClick={tab=index},icon={Icon(item.icon,item.label)},label={Text(item.label)})
@@ -93,7 +86,6 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 if(model.error.isNotBlank()) Notice(model.error,true)
                 if(model.message.isNotBlank()) Notice(model.message)
-                if(localMessage.isNotBlank()) Text(localMessage,style=MaterialTheme.typography.bodySmall)
                 when(tab) {
                     0 -> Home(model,{tab=1})
                     1 -> Connect(model)
@@ -129,7 +121,7 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
                 "Forget device" -> model.forget()
                 else -> model.control(selected)
             }
-        }){Text("Confirm")}},dismissButton={TextButton(onClick={action=null}){Text("Cancel")}})
+        },enabled=!model.busy){Text(if(model.busy) "Please wait…" else "Confirm")}},dismissButton={TextButton(onClick={action=null}){Text("Cancel")}})
     }
 }
 @Composable private fun Heading(title:String,subtitle:String) {

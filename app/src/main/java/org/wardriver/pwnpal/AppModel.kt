@@ -3,6 +3,9 @@ package org.wardriver.pwnpal
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.runtime.*
+import androidx.lifecycle.SavedStateHandle
+import android.net.Uri
+import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
@@ -12,10 +15,41 @@ import java.net.UnknownHostException
 import org.json.JSONObject
 import java.util.Base64
 
-class AppModel(app: Application): AndroidViewModel(app) {
+class AppModel(app: Application, private val savedState:SavedStateHandle): AndroidViewModel(app) {
     private val vault = Vault(app)
     private val client = DeviceClient(app,vault)
     private val gate = Mutex()
+    private val exports=PendingExport(File(app.cacheDir,"pending-exports"))
+    suspend fun prepareExport(text:String):Boolean = try {
+        val id=withContext(Dispatchers.IO){exports.create(text)}
+        savedState.get<String>("pendingExport")?.let { old -> withContext(Dispatchers.IO){exports.remove(old)} }
+        savedState["pendingExport"]=id
+        true
+    } catch(e:CancellationException){throw e} catch(e:Exception){error=e.message?:"Could not prepare export";false}
+    fun finishExport(uri:Uri?) {
+        val id=savedState.get<String>("pendingExport")
+        viewModelScope.launch {
+            try {
+                if(uri!=null) {
+                    require(id!=null){"Pending export is unavailable. Start the export again."}
+                    withContext(Dispatchers.IO) {
+                        val bytes=exports.read(id) // Validate before opening or truncating the destination.
+                        getApplication<Application>().contentResolver.openOutputStream(uri,"wt")?.use{it.write(bytes)} ?: error("Cannot open destination")
+                    }
+                    message="Export saved"
+                }
+            } catch(e:Exception){error="Export failed: ${e.message}"}
+            finally {
+                savedState.remove<String>("pendingExport")
+                if(id!=null)withContext(Dispatchers.IO){runCatching{exports.remove(id)}}
+            }
+        }
+    }
+    private fun connectionLost() {
+        client.disconnect();connected=false;status=null;screen=null;updated="";logs="";screenError=""
+        clearPlugins()
+        error="SSH connection lost. Reconnect from Connect."
+    }
     var profile by mutableStateOf(Profile())
     var connected by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
@@ -77,14 +111,24 @@ class AppModel(app: Application): AndroidViewModel(app) {
         }
     }
 
+    init {
+        viewModelScope.launch {
+            while(isActive) {
+                delay(1000)
+                if(connected && !busy && !client.isConnected())connectionLost()
+            }
+        }
+    }
     init { runCatching { vault.load() }.onSuccess { profile=it }.onFailure { error="Saved credentials could not be decrypted. Enter them again." } }
     private fun runTask(block: suspend () -> Unit) {
-        if(busy) return
+        if(busy) { message="Another operation is running. Try again when it finishes."; return }
+        busy=true
         viewModelScope.launch {
             gate.withLock {
                 busy=true; error=""; message=""
                 try { block() } catch(e: CancellationException) { throw e } catch(e: Exception) {
                     if(e is TrustRequired) { trust=e; trustProfile=profile }
+                    else if(connected && !client.isConnected()) connectionLost()
                     else error=friendly(e)
                 } finally { busy=false }
             }
@@ -116,7 +160,7 @@ class AppModel(app: Application): AndroidViewModel(app) {
         frame.onSuccess { screen=it; screenError="" }.onFailure { screen=null; screenError=it.message ?: "Live screen unavailable" }
         updated=java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(java.util.Date())
     }
-    fun refresh() { if(connected) runTask { refreshInternal() } }
+    fun refresh() { if(connected && !busy) runTask { refreshInternal() } }
     fun loadLogs() { runTask { logs=withContext(Dispatchers.IO){client.logs()} } }
     fun loadConfig() { runTask { config=withContext(Dispatchers.IO){client.readConfig()}; draft=config!!.text; message="Configuration loaded. Changes stay here until you save." } }
     fun saveConfig() {

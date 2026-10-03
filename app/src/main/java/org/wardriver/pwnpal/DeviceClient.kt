@@ -14,6 +14,7 @@ class DeviceClient(private val context: Context, private val vault: Vault) {
     private var session: Session? = null
     private var tunnelPort: Int = 0
     private var profile: Profile? = null
+    fun isConnected():Boolean = session?.isConnected == true
     fun disconnect() { session?.disconnect(); session = null; tunnelPort = 0; profile = null }
     fun connect(p: Profile) {
         disconnect(); p.validate()
@@ -55,8 +56,8 @@ class DeviceClient(private val context: Context, private val vault: Vault) {
     fun command(command: String, limit: Int = 512 * 1024, stdin: ByteArray? = null): String {
         val s = session?.takeIf { it.isConnected } ?: error("SSH connection is closed. Reconnect from Connect.")
         val ch = s.openChannel("exec") as ChannelExec
-        val output = ByteArrayOutputStream()
-        val errors = ByteArrayOutputStream()
+        val output = BoundedOutputStream(limit)
+        val errors = BoundedOutputStream(limit)
         try {
             ch.setCommand(command)
             ch.setInputStream(stdin?.inputStream())
@@ -70,14 +71,15 @@ class DeviceClient(private val context: Context, private val vault: Vault) {
                     val n = input.read(buffer, 0, minOf(buffer.size,input.available()))
                     if(n < 0) break
                     output.write(buffer,0,n)
-                    require(output.size() <= limit && errors.size() <= limit) { "Device response exceeded the limit." }
+                    require(!output.exceeded && !errors.exceeded) { "Device response exceeded the limit." }
                 }
+                require(!output.exceeded && !errors.exceeded) { "Device response exceeded the limit." }
                 if(ch.isClosed && input.available() == 0) break
                 if((System.nanoTime()-start)/1_000_000 > 25000) error("Device command timed out. Check its state before retrying.")
                 Thread.sleep(20)
             }
-            if(ch.exitStatus != 0) error(errors.toString("UTF-8").takeLast(1800).ifBlank { "Device command failed (${ch.exitStatus})." })
-            return output.toString("UTF-8")
+            if(ch.exitStatus != 0) error(errors.text().takeLast(1800).ifBlank { "Device command failed (${ch.exitStatus})." })
+            return output.text()
         } finally { ch.disconnect() }
     }
     private fun script(name: String, prefix: String = "", privileged: Boolean = true): String {

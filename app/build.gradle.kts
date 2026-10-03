@@ -10,8 +10,8 @@ android {
         applicationId = "org.wardriver.pwnpal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-beta"
+        versionCode = 3
+        versionName = "0.2.1-beta"
     }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "META-INF/versions/**/OSGI-INF/MANIFEST.MF" }

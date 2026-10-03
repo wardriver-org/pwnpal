@@ -1,6 +1,14 @@
-# PwnPal · 0.2.0 beta
+# PwnPal · 0.2.1 beta
 
 A native Android companion for a Pwnagotchi running jayofelony 2.9.5.4. Built with Kotlin and Jetpack Compose, with a dark interface and a side-by-side dashboard on wider screens.
+
+## 0.2.1 fixes
+
+- Bound SSH stdout and stderr buffering, including stderr-only failures.
+- Keep pending exports as private snapshots across activity recreation; missing snapshots fail before opening the destination.
+- Disable action confirmations during another operation and report busy requests explicitly.
+- Detect closed SSH sessions, clear stale readings, and return Connect to reconnect mode.
+- Use one shared configuration lock across plugin transactions and full configuration saves; verify install/remove results before reporting success.
 
 ## Screenshot
 
@@ -90,7 +98,7 @@ Open the root folder in Android Studio for editing. The wrapper is included. Fir
 
 ## Release signing
 
-The 0.2.0 beta release APK is non-debuggable and signed with the Wardriver HexDroid release key. Its signing certificate SHA-256 is:
+The 0.2.1 beta release APK is non-debuggable and signed with the Wardriver HexDroid release key. Its signing certificate SHA-256 is:
 
 ```text
 6b59ea42d196af4545fb3d27924b13921db94740c8a82fb5302086c311dea02a

@@ -142,10 +142,23 @@ def _handle(request, save, config=CONFIG, root=None):
 
 def handle(request, save, config=CONFIG, root=None):
     import fcntl
-    with open(str(config)+'.pwnpal-plugins.lock','a') as lock:
+    with open(str(config)+'.pwnpal.lock','a') as lock:
         os.chmod(lock.name,0o600)
         fcntl.flock(lock,fcntl.LOCK_EX)
-        return _handle(request,save,config,root)
+        def locked_save(path, expected, encoded):
+            return save(path, expected, encoded, lock_held=True)
+        result = _handle(request,locked_save,config,root)
+        if request.get('action') in ('install','remove'):
+            state,effective,_,_=snapshot(config,root)
+            name=request['name']
+            if effective.get('main',{}).get('plugins',{}).get(name,{}).get('enabled',False):
+                raise ValueError('Plugin configuration changed during installation. Refresh and check the device before restarting.')
+            installed=next((p for p in state['plugins'] if p['name']==name),None)
+            if request['action']=='install' and (not installed or installed['sha256']!=request['sha256']):
+                raise ValueError('Installed plugin changed unexpectedly. Refresh and review again.')
+            if request['action']=='remove' and installed:
+                raise ValueError('Plugin is still present. Refresh and check the device.')
+        return result
 
 if __name__=='__main__':
     ns={'__name__':'pwnpal_config_helper'}
