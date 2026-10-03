@@ -14,6 +14,7 @@ class DeviceClient(private val context: Context, private val vault: Vault) {
     private var session: Session? = null
     private var tunnelPort: Int = 0
     private var profile: Profile? = null
+    fun terminal():SshTerminal = SshTerminal(session?.takeIf{it.isConnected} ?: error("Connect first"))
     fun isConnected():Boolean = session?.isConnected == true
     fun disconnect() { session?.disconnect(); session = null; tunnelPort = 0; profile = null }
     fun connect(p: Profile) {

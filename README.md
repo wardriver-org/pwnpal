@@ -1,6 +1,18 @@
-# PwnPal · 0.2.1 beta
+# PwnPal · 0.3.0 beta
 
 A native Android companion for a Pwnagotchi running jayofelony 2.9.5.4. Built with Kotlin and Jetpack Compose, with a dark interface and a side-by-side dashboard on wider screens.
+
+## Terminal
+
+Open **Manage → Terminal → Open terminal** for an interactive SSH shell using the existing verified connection and login account. The app requests an `xterm-256color` PTY, supports ANSI colors and interactive programs such as Vim and top, and resizes the remote terminal with the window. No automatic sudo is applied.
+
+- Tap **Keyboard** to open the phone keyboard. The extra key row provides Ctrl, Esc, Tab, arrows, Ctrl-C, Ctrl-D, Home/End, and Page Up/Down. Ctrl applies to the next character.
+- **Copy** copies selected text, or the visible terminal screen when nothing is selected. **Paste** previews clipboard text before sending it; pasted newlines can execute commands.
+- **Close terminal** ends the shell and may stop foreground commands. Use tmux on the device for persistent sessions. Normal rotation and window resizing are handled in place; Android process termination or other activity recreation can end the terminal.
+- Scrollback is limited to 2,000 lines. Output is consumed in bounded chunks with renderer backpressure, and the input queue is bounded. Terminal history is not saved by PwnPal; the remote shell may save its own command history.
+- The xterm.js renderer is bundled for offline use. Its WebView only serves an exact allowlist of bundled assets; network and file access are blocked. Remote clipboard escape sequences and terminal hyperlinks cannot access the phone clipboard or open pages.
+
+Connection and live screen have been reported working by the user on their device. The new terminal and plugin management still need physical-device testing.
 
 ## 0.2.1 fixes
 
@@ -77,7 +89,7 @@ Configuration compare-and-swap detects changes since loading; advisory locking c
 
 ## Current boundaries
 
-This is a beta, not yet verified against a physical Pwnagotchi or Pixel Fold. Version-specific integration was inspected against upstream tag v2.9.5.4. Capture count means `.pcap`/`.pcapng` files, not independently validated handshakes. Missing data is shown as unavailable.
+This is a beta. The user has confirmed connection and live screen on their device; other hardware interactions remain unverified. Version-specific integration was inspected against upstream tag v2.9.5.4. Capture count means `.pcap`/`.pcapng` files, not independently validated handshakes. Missing data is shown as unavailable.
 
 Not included yet: multi-device profiles, SSH private-key import, automatic Bluetooth provisioning, native plugin-specific forms, capture downloads, or mode-switch controls. The connection choices provide setup guidance; they do not create an Android network interface. Live screen and monitoring require the device to be reachable.
 
@@ -98,7 +110,7 @@ Open the root folder in Android Studio for editing. The wrapper is included. Fir
 
 ## Release signing
 
-The 0.2.1 beta release APK is non-debuggable and signed with the Wardriver HexDroid release key. Its signing certificate SHA-256 is:
+The 0.3.0 beta release APK is non-debuggable and signed with the Wardriver HexDroid release key. Its signing certificate SHA-256 is:
 
 ```text
 6b59ea42d196af4545fb3d27924b13921db94740c8a82fb5302086c311dea02a
@@ -115,6 +127,7 @@ Build an unsigned release with `./gradlew assembleRelease`. Align and sign it wi
 - Firmware configuration defaults: `pwnagotchi/defaults.toml`.
 - Android / Compose: https://developer.android.com/jetpack/compose
 - SSH implementation: https://github.com/mwiede/jsch (BSD-style license).
+- Terminal renderer: https://github.com/xtermjs/xterm.js (MIT; bundled xterm 5.5.0 and fit addon 0.10.0, licenses and package integrity recorded in `app/src/main/assets/terminal/`).
 - EdDSA compatibility provider: https://github.com/str4d/ed25519-java (CC0).
 
 Independent companion app; not an official Pwnagotchi project release. All device-management use should be on devices you own or administer.

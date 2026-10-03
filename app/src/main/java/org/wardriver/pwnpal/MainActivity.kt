@@ -58,6 +58,7 @@ private data class Tab(val label:String,val icon:ImageVector)
 private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outlined.Link),Tab("Manage",Icons.Outlined.Tune),Tab("Logs",Icons.Outlined.Terminal))
 @Composable private fun PwnPal(model:AppModel=viewModel()) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var terminal by remember { mutableStateOf(false) }
     var plugins by rememberSaveable { mutableStateOf(false) }
     var support by remember { mutableStateOf(false) }
     var action by remember { mutableStateOf<String?>(null) }
@@ -71,7 +72,7 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
     }
     fun export(text:String,name:String) { scope.launch { if(model.prepareExport(text)) exporter.launch(name) } }
     Scaffold(containerColor=Background, bottomBar={
-        NavigationBar(containerColor=Background) { tabs.forEachIndexed { index,item ->
+        if(!terminal) NavigationBar(containerColor=Background) { tabs.forEachIndexed { index,item ->
             NavigationBarItem(selected=tab==index,onClick={tab=index},icon={Icon(item.icon,item.label)},label={Text(item.label)})
         } }
     }) { padding ->
@@ -83,13 +84,13 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
                 Text(if(model.connected) "SSH connected" else "Not connected",color=if(model.connected) Mint else MaterialTheme.colorScheme.secondary,fontSize=12.sp)
             }
             if(model.busy) LinearProgressIndicator(Modifier.fillMaxWidth(),color=Mint)
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            if(terminal) TerminalScreen(model,{terminal=false},Modifier.weight(1f)) else Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                 if(model.error.isNotBlank()) Notice(model.error,true)
                 if(model.message.isNotBlank()) Notice(model.message)
                 when(tab) {
                     0 -> Home(model,{tab=1})
                     1 -> Connect(model)
-                    2 -> if(plugins) PluginScreen(model,{plugins=false},{action="Restart service"}) else Manage(model,{action=it},{plugins=true},{support=true})
+                    2 -> if(plugins) PluginScreen(model,{plugins=false},{action="Restart service"}) else Manage(model,{action=it},{plugins=true},{support=true},{terminal=true})
                     3 -> Logs(model,{export(it,"pwnpal-device.log")})
                 }
                 Text("PwnPal ${BuildConfig.VERSION_NAME}  ·  Local connection",color=MaterialTheme.colorScheme.secondary,fontSize=11.sp)
@@ -200,7 +201,7 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
     }
     Button(onClick={if(m.connected)m.disconnect() else m.connect()},enabled=!m.busy,modifier=Modifier.fillMaxWidth().height(52.dp)){Text(if(m.connected) "Disconnect" else "Connect securely")}
 }
-@Composable private fun Manage(m:AppModel,confirm:(String)->Unit,plugins:()->Unit,support:()->Unit) {
+@Composable private fun Manage(m:AppModel,confirm:(String)->Unit,plugins:()->Unit,support:()->Unit,terminal:()->Unit) {
     Heading("Make it yours.","Device controls and configuration, in one place.")
     if(!m.connected) {Notice("Connect to your Pwnagotchi to manage it.");OutlinedButton(onClick={confirm("Forget device")},enabled=!m.busy){Text("Forget saved device")};SupportLink(support);return}
     if(m.status?.privileged==false) Notice("Your account does not have passwordless sudo. Administrative actions may be unavailable.")
@@ -208,6 +209,10 @@ private val tabs=listOf(Tab("Home",Icons.Outlined.Home),Tab("Connect",Icons.Outl
         listOf("Restart service","Reboot device","Shut down device","Cancel scheduled power action").forEach { action ->
             OutlinedButton(onClick={confirm(action)},enabled=!m.busy,modifier=Modifier.fillMaxWidth()){Text(action)}
         }
+    }
+    Section("Terminal") {
+        Text("Interactive SSH shell as ${m.profile.user}. Supports Vim, top, and other terminal tools.")
+        OutlinedButton(onClick=terminal,enabled=!m.busy){Icon(Icons.Outlined.Terminal,null);Spacer(Modifier.width(8.dp));Text("Open terminal")}
     }
     Section("Plugins") {
         Text("Manage built-in plugins and install third-party plugins from GitHub.")

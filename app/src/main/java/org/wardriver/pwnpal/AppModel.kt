@@ -18,6 +18,7 @@ import java.util.Base64
 class AppModel(app: Application, private val savedState:SavedStateHandle): AndroidViewModel(app) {
     private val vault = Vault(app)
     private val client = DeviceClient(app,vault)
+    fun terminal():SshTerminal = client.terminal()
     private val gate = Mutex()
     private val exports=PendingExport(File(app.cacheDir,"pending-exports"))
     suspend fun prepareExport(text:String):Boolean = try {
